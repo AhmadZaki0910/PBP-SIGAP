@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sigap_logo.dart';
 import '../../../../core/widgets/social_icons.dart';
 import '../../../dashboard/presentation/screens/dashboard_screen.dart';
+import 'register_screen.dart';
 
 /// Screen Login SIGAP dengan bahasa visual yang selaras dengan Register:
 /// - Header Dark Forest Green dengan Branding SIGAP
@@ -66,38 +68,147 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  void _handleSocialLogin(String provider) async {
+    setState(() => _isLoading = true);
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    const userName = 'Ahmad Zaki';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Text('Berhasil masuk dengan $provider! Selamat datang, $userName.'),
+          ],
+        ),
+        backgroundColor: AppColors.primaryDark,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (context) => const DashboardScreen(userName: userName),
+      ),
+      (route) => false,
+    );
+  }
+
   void _handleForgotPassword() {
-    showDialog(
+    final resetEmailCtrl = TextEditingController(text: _emailController.text.trim());
+    final formKey = GlobalKey<FormState>();
+
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text(
-          'Pemulihan Sandi',
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textDark,
-          ),
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
         ),
-        content: Text(
-          'Instruksi reset kata sandi akan dikirimkan ke alamat email yang Anda daftarkan.',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 14,
-            color: AppColors.textSlate,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Tutup',
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Pemulihan Kata Sandi',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                'Masukkan alamat email terdaftar Anda. Kami akan mengirimkan tautan reset kata sandi dalam hitungan detik.',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13.5,
+                  color: AppColors.textSlate,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 18),
+              TextFormField(
+                controller: resetEmailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  hintText: 'nama@email.com',
+                  prefixIcon: const Icon(Icons.mail_outline_rounded, color: AppColors.primary),
+                  filled: true,
+                  fillColor: AppColors.mintSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.borderLight),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.primaryDark, width: 1.5),
+                  ),
+                ),
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty || !val.contains('@')) {
+                    return 'Masukkan alamat email yang valid';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryDark,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    if (formKey.currentState!.validate()) {
+                      final email = resetEmailCtrl.text.trim();
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Tautan pemulihan kata sandi telah dikirim ke $email!'),
+                          backgroundColor: AppColors.safeGreen,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                  child: Text(
+                    'KIRIM TAUTAN RESET',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -126,34 +237,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 26,
-                                height: 26,
-                                decoration: BoxDecoration(
-                                  color: AppColors.mintAccent,
-                                  borderRadius: BorderRadius.circular(5.0),
-                                ),
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.sensors_rounded,
-                                    size: 16,
-                                    color: AppColors.primaryDark,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                'SIGAP',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1.5,
-                                  color: AppColors.textWhite,
-                                ),
-                              ),
-                            ],
+                          const SigapLogo(
+                            size: 32,
+                            showText: true,
+                            textColor: AppColors.textWhite,
+                            hasGlow: true,
                           ),
                           IconButton(
                             onPressed: () => Navigator.of(context).pop(),
@@ -225,13 +313,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     _buildSocialButton(
                       icon: const GoogleLogo(size: 20),
                       label: 'Log in with Google',
-                      onTap: () {},
+                      onTap: () => _handleSocialLogin('Google'),
                     ),
                     const SizedBox(height: 12),
                     _buildSocialButton(
                       icon: const FacebookLogo(size: 20),
                       label: 'Log in with Facebook',
-                      onTap: () {},
+                      onTap: () => _handleSocialLogin('Facebook'),
                     ),
                     const SizedBox(height: 22),
 
@@ -359,16 +447,27 @@ class _LoginScreenState extends State<LoginScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          "Don't have an account? ",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            color: AppColors.textSlate,
+                        Flexible(
+                          child: Text(
+                            "Don't have an account? ",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              color: AppColors.textSlate,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         GestureDetector(
                           onTap: () {
-                            Navigator.of(context).pop();
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            } else {
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (context) => const RegisterScreen(),
+                                ),
+                              );
+                            }
                           },
                           child: Text(
                             'Register',
@@ -469,12 +568,15 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             icon,
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textDark,
+            Flexible(
+              child: Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

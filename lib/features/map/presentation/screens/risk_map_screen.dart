@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sigap/core/theme/app_colors.dart';
+import 'package:sigap/core/widgets/sigap_logo.dart';
 import 'package:sigap/features/alerts/presentation/screens/alerts_screen.dart';
 import 'package:sigap/features/family/presentation/screens/family_assistance_screen.dart';
+import 'package:sigap/core/services/bmkg_service.dart';
 import 'package:sigap/features/settings/presentation/screens/settings_screen.dart';
 import 'package:sigap/features/profile/presentation/screens/profile_screen.dart';
 
@@ -63,6 +65,43 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
+  // Real-Time BMKG State
+  BmkgGempa? _bmkgGempa;
+  bool _isLoadingBmkg = true;
+  bool _isLiveBmkg = false;
+  double _mapZoomScale = 1.0;
+
+  // Shelter Evakuasi Tsunami Kota Padang
+  final List<Map<String, dynamic>> _padangShelters = const [
+    {
+      'name': 'TES Gedung Escape Ulak Karang',
+      'type': 'TES Utama',
+      'capacity': '3.000 jiwa',
+      'elevation': '16 mdpl',
+      'dist': '420m',
+      'route': 'Lewat Jl. Bahari ke utara',
+      'relativePos': Offset(0.48, 0.32),
+    },
+    {
+      'name': 'Masjid Raya Sumatera Barat',
+      'type': 'Zona Hijau',
+      'capacity': '10.000 jiwa',
+      'elevation': 'Aman Tsunami',
+      'dist': '1.2 km',
+      'route': 'Jl. Khatib Sulaiman',
+      'relativePos': Offset(0.78, 0.28),
+    },
+    {
+      'name': 'SMPN 1 Padang (Vertical Evac)',
+      'type': 'Shelter Vertikal',
+      'capacity': '1.500 jiwa',
+      'elevation': 'Lt. 3 & 4',
+      'dist': '650m',
+      'route': 'Jl. Jend. Sudirman',
+      'relativePos': Offset(0.52, 0.62),
+    },
+  ];
+
   // Daftar Titik Risiko Kota Padang
   final List<RiskZonePoint> _allRiskPoints = const [
     RiskZonePoint(
@@ -118,6 +157,20 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
       parent: _pulseController,
       curve: Curves.easeOut,
     );
+
+    _loadBmkgData();
+  }
+
+  Future<void> _loadBmkgData() async {
+    setState(() => _isLoadingBmkg = true);
+    final data = await BmkgService.fetchLatestGempa();
+    if (mounted) {
+      setState(() {
+        _bmkgGempa = data;
+        _isLoadingBmkg = false;
+        _isLiveBmkg = data.isLiveFromApi;
+      });
+    }
   }
 
   @override
@@ -283,6 +336,11 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
   }
 
   void _showPointDetail(RiskZonePoint point) {
+    if (point.category.toLowerCase() == 'gempa') {
+      _showBmkgGempaDetailModal(_bmkgGempa ?? BmkgGempa.fallbackPadang);
+      return;
+    }
+
     Color levelBg;
     Color levelColor;
     if (point.level == 'Tinggi') {
@@ -422,6 +480,524 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
     );
   }
 
+  void _showBmkgGempaDetailModal(BmkgGempa gempa) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.78,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (ctx, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.borderLight,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: gempa.isLiveFromApi ? Colors.red.shade50 : AppColors.alertPeach,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: gempa.isLiveFromApi ? AppColors.alertAwas : AppColors.alertTerracotta,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: gempa.isLiveFromApi ? AppColors.alertAwas : AppColors.alertTerracotta,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        gempa.isLiveFromApi ? 'LIVE API BMKG PUSAT' : 'DATA BMKG PADANG',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: gempa.isLiveFromApi ? AppColors.alertAwas : AppColors.alertRust,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  gempa.jam,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSlate,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Hero Card Magnitudo
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: AppColors.sunsetAlertGradient,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.alertTerracotta.withValues(alpha: 0.3),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'MAGNITUDO',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white.withValues(alpha: 0.9),
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'Kedalaman ${gempa.kedalaman}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'M ${gempa.magnitude}',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -1,
+                    ),
+                  ),
+                  Text(
+                    gempa.wilayah,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.95),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Status Potensi Tsunami Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: gempa.potensi.toLowerCase().contains('tidak')
+                    ? const Color(0xFFE8F7EE)
+                    : const Color(0xFFFFECEB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: gempa.potensi.toLowerCase().contains('tidak')
+                      ? AppColors.safeGreen
+                      : AppColors.alertAwas,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    gempa.potensi.toLowerCase().contains('tidak')
+                        ? Icons.check_circle_rounded
+                        : Icons.warning_rounded,
+                    color: gempa.potensi.toLowerCase().contains('tidak')
+                        ? AppColors.safeGreen
+                        : AppColors.alertAwas,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'STATUS TSUNAMI',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textSlate,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          gempa.potensi,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: gempa.potensi.toLowerCase().contains('tidak')
+                                ? AppColors.primaryDark
+                                : AppColors.alertAwas,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            // Info parameter koordinat & skala MMI
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.mintSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.borderLight),
+              ),
+              child: Column(
+                children: [
+                  _buildDetailMetaRow('Koordinat BMKG', '${gempa.lintang}, ${gempa.bujur}'),
+                  const Divider(height: 16, color: AppColors.borderLight),
+                  _buildDetailMetaRow('Skala Dirasakan', gempa.dirasakan),
+                  const Divider(height: 16, color: AppColors.borderLight),
+                  _buildDetailMetaRow('Waktu Gempa', '${gempa.tanggal} pukul ${gempa.jam}'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            // 3 Tindakan Cepat (Anti Wall of Text)
+            Text(
+              '3 LANGKAH KESELAMATAN SEGERA',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textSlate,
+                letterSpacing: 0.6,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildActionGuideItem(
+              icon: Icons.meeting_room_rounded,
+              title: 'Evakuasi ke Titik Kumpul / Lapangan Terbuka',
+              desc: 'Jauhi bangunan retak, tiang listrik, dan pohon tinggi.',
+            ),
+            const SizedBox(height: 6),
+            _buildActionGuideItem(
+              icon: Icons.shield_rounded,
+              title: 'Ketahui Shelter Tsunami (TES) Terdekat',
+              desc: 'TES Gedung Escape Ulak Karang berjarak 420m (16 mdpl).',
+            ),
+            const SizedBox(height: 6),
+            _buildActionGuideItem(
+              icon: Icons.power_off_rounded,
+              title: 'Periksa & Putus Arus Listrik / Gas Rumah',
+              desc: 'Cegah korsleting api akibat runtuhan material pasca guncangan.',
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Info resmi BMKG disalin ke papan klip!'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.share_outlined, size: 18),
+                    label: const Text('Bagikan'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: AppColors.borderLight),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryDark,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Tutup'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showShelterDetailModal(Map<String, dynamic> shelter) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.borderLight,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.mintAccent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.shield_rounded, color: AppColors.primaryDark, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryDark,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          shelter['type'].toString().toUpperCase(),
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        shelter['name'] ?? '',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.mintSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.borderLight),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildShelterMetric('Jarak', shelter['dist'] ?? '-'),
+                  _buildShelterMetric('Elevasi', shelter['elevation'] ?? '-'),
+                  _buildShelterMetric('Kapasitas', shelter['capacity'] ?? '-'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Icon(Icons.alt_route_rounded, size: 18, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Rute: ${shelter['route'] ?? 'Ikuti rambu jalur evakuasi resmi BPBD'}',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Memulai panduan rute ke ${shelter['name']}...'),
+                      backgroundColor: AppColors.primaryDark,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.directions_run_rounded, color: Colors.white),
+                label: const Text('Mulai Navigasi Evakuasi'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryDark,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailMetaRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSlate,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textDark,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionGuideItem({required IconData icon, required String title, required String desc}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.mintSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.mintAccent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, size: 16, color: AppColors.primaryDark),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  desc,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    color: AppColors.textSlate,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShelterMetric(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 11,
+            color: AppColors.textSlate,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w800,
+            color: AppColors.primaryDark,
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showUserLocationDetails() {
     showModalBottomSheet(
       context: context,
@@ -551,7 +1127,11 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
 
               // 4. Filter Button ("filter: jenis risiko ⌄")
               _buildFilterDropdown(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+
+              // 4.5. Live BMKG Data Indicator Banner
+              _buildBmkgLiveBar(),
+              const SizedBox(height: 14),
 
               // 5. Interactive Map Container
               _buildMapContainer(),
@@ -580,29 +1160,16 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: AppColors.primaryDark,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'SIGAP',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 17,
-                fontWeight: FontWeight.w900,
-                color: AppColors.primaryDark,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ],
+        const Flexible(
+          child: SigapLogo(
+            size: 26,
+            showText: true,
+            textColor: AppColors.primaryDark,
+          ),
         ),
+        const SizedBox(width: 8),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'PDG · 09:41',
@@ -729,6 +1296,171 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
     );
   }
 
+  Widget _buildBmkgLiveBar() {
+    final gempa = _bmkgGempa ?? BmkgGempa.fallbackPadang;
+
+    return GestureDetector(
+      onTap: () => _showBmkgGempaDetailModal(gempa),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFF6F0), Color(0xFFFFECE0)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.alertBorderPeach, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.alertTerracotta.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.alertTerracotta,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.sensors_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: _isLiveBmkg ? AppColors.alertAwas : AppColors.safeGreen,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          _isLiveBmkg ? 'BMKG PUSAT · LIVE' : 'BMKG PADANG · SIAGA',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.alertRust,
+                            letterSpacing: 0.4,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        gempa.jam,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSlate,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Gempa M${gempa.magnitude} · ${gempa.wilayah}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tsunami: ${gempa.potensi} · Ketuk untuk detail & rute',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSlate,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: _loadBmkgData,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.borderLight),
+                ),
+                child: _isLoadingBmkg
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                      )
+                    : const Icon(Icons.sync_rounded, size: 16, color: AppColors.primaryDark),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShelterPin(Map<String, dynamic> shelter) {
+    final Offset pos = shelter['relativePos'] as Offset;
+    return Positioned(
+      left: 360 * pos.dx - 28,
+      top: 380 * pos.dy - 12,
+      child: GestureDetector(
+        onTap: () => _showShelterDetailModal(shelter),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppColors.primaryDark,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.shield_rounded, size: 11, color: AppColors.safeGreen),
+              const SizedBox(width: 3),
+              Text(
+                shelter['name'].toString().split(' ').first,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapContainer() {
     return Container(
       width: double.infinity,
@@ -741,31 +1473,74 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
         borderRadius: BorderRadius.circular(15),
         child: Stack(
           children: [
-            // Custom Painted Map (Coastline, Rivers, Hills, Topography)
+            // Scalable Map Content with Animated Zoom
             Positioned.fill(
-              child: CustomPaint(
-                painter: _PadangMapPainter(
-                  pulseProgress: _pulseAnimation.value,
+              child: AnimatedScale(
+                scale: _mapZoomScale,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                child: Stack(
+                  children: [
+                    // Custom Painted Map (Coastline, Rivers, Hills, Topography)
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _PadangMapPainter(
+                          pulseProgress: _pulseAnimation.value,
+                        ),
+                      ),
+                    ),
+
+                    // Animated Radar concentric rings
+                    AnimatedBuilder(
+                      animation: _pulseAnimation,
+                      builder: (context, child) {
+                        return Positioned.fill(
+                          child: CustomPaint(
+                            painter: _RadarWavePainter(pulseProgress: _pulseAnimation.value),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // User Location Marker (Padang Barat)
+                    Positioned(
+                      left: 360 * 0.38 - 12,
+                      top: 380 * 0.46 - 12,
+                      child: GestureDetector(
+                        onTap: _showUserLocationDetails,
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: AppColors.safeGreen.withValues(alpha: 0.25),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: AppColors.safeGreen,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Tsunami Shelter Pins
+                    ..._padangShelters.map((shelter) => _buildShelterPin(shelter)),
+
+                    // Map Pins / Badges
+                    ..._filteredPoints.map((point) {
+                      return _buildMapBadge(point);
+                    }),
+                  ],
                 ),
               ),
             ),
-
-            // Animated Radar concentric rings
-            AnimatedBuilder(
-              animation: _pulseAnimation,
-              builder: (context, child) {
-                return Positioned.fill(
-                  child: CustomPaint(
-                    painter: _RadarWavePainter(pulseProgress: _pulseAnimation.value),
-                  ),
-                );
-              },
-            ),
-
-            // Map Pins / Badges
-            ..._filteredPoints.map((point) {
-              return _buildMapBadge(point);
-            }),
 
             // Bottom-Left Overlay Tag: "PLACEHOLDER PETA · PADANG"
             Positioned(
@@ -804,12 +1579,51 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
               child: Column(
                 children: [
                   _buildMapControlBtn(
+                    icon: Icons.add_rounded,
+                    onTap: () {
+                      setState(() {
+                        _mapZoomScale = (_mapZoomScale + 0.25).clamp(0.75, 2.0);
+                      });
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Perbesaran Peta: ${(_mapZoomScale * 100).toInt()}%'),
+                          duration: const Duration(milliseconds: 700),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  _buildMapControlBtn(
+                    icon: Icons.remove_rounded,
+                    onTap: () {
+                      setState(() {
+                        _mapZoomScale = (_mapZoomScale - 0.25).clamp(0.75, 2.0);
+                      });
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Perbesaran Peta: ${(_mapZoomScale * 100).toInt()}%'),
+                          duration: const Duration(milliseconds: 700),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  _buildMapControlBtn(
                     icon: Icons.my_location_rounded,
                     onTap: () {
+                      setState(() {
+                        _mapZoomScale = 1.0;
+                      });
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Memusatkan peta ke lokasi Anda (Padang Barat)'),
+                          content: Text('Memusatkan peta ke lokasi Anda (Padang Barat) · Zoom 100%'),
                           duration: Duration(seconds: 1),
+                          behavior: SnackBarBehavior.floating,
                         ),
                       );
                     },
@@ -965,7 +1779,9 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
             ),
           ),
           const SizedBox(height: 14),
-          Row(
+          Wrap(
+            spacing: 20,
+            runSpacing: 10,
             children: [
               _buildLegendItem(
                 label: 'Rendah',
@@ -979,7 +1795,6 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
                   ),
                 ),
               ),
-              const SizedBox(width: 24),
               _buildLegendItem(
                 label: 'Sedang',
                 level: 'Sedang',
@@ -992,7 +1807,6 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
                   ),
                 ),
               ),
-              const SizedBox(width: 24),
               _buildLegendItem(
                 label: 'Tinggi',
                 level: 'Tinggi',
@@ -1049,13 +1863,20 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
 
   Widget _buildBottomNavigationBar() {
     return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: AppColors.borderLight.withValues(alpha: 0.7), width: 1.0),
-        ),
+        color: Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryDark.withValues(alpha: 0.12),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       child: SafeArea(
         top: false,
         child: Row(
@@ -1140,30 +1961,40 @@ class _RiskMapScreenState extends State<RiskMapScreen> with SingleTickerProvider
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
-          height: 56,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 48,
           margin: const EdgeInsets.symmetric(horizontal: 2),
           decoration: BoxDecoration(
-            color: isActive ? AppColors.mintAccent : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            color: isActive ? AppColors.primaryDark : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: AppColors.primaryDark.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                size: 20,
-                color: isActive ? AppColors.primaryDark : AppColors.textSlate,
+                size: 19,
+                color: isActive ? Colors.white : AppColors.textSlate,
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 10.5,
+                  fontSize: 10,
                   fontWeight: isActive ? FontWeight.w800 : FontWeight.w500,
-                  color: isActive ? AppColors.primaryDark : AppColors.textSlate,
+                  color: isActive ? Colors.white : AppColors.textSlate,
                 ),
               ),
             ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sigap/main.dart';
 import 'package:sigap/features/alerts/presentation/screens/alerts_screen.dart';
+import 'package:sigap/features/dashboard/presentation/screens/dashboard_screen.dart';
 import 'package:sigap/features/family/presentation/screens/family_assistance_screen.dart';
 import 'package:sigap/features/map/presentation/screens/risk_map_screen.dart';
 import 'package:sigap/features/settings/presentation/screens/settings_screen.dart';
@@ -13,7 +14,7 @@ void main() {
 
     // Verify that SIGAP branding and tagline are displayed
     expect(find.text('SIGAP'), findsOneWidget);
-    expect(find.text('Sistem informasi bencana'), findsOneWidget);
+    expect(find.text('Siaga Bencana Kota Padang'), findsOneWidget);
   });
 
   testWidgets('Alerts screen loads properly with active and riwayat cards', (WidgetTester tester) async {
@@ -122,4 +123,28 @@ void main() {
     expect(find.text('Alamat'), findsOneWidget);
     expect(find.text('SIMPAN PERUBAHAN'), findsOneWidget);
   });
+
+  testWidgets('Dashboard screen loads properly with all redesigned widgets', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: DashboardScreen()));
+
+    // Verify Title & Badges
+    expect(find.text('SIAGA · 09:41'), findsOneWidget);
+    expect(find.text('🚨 BMKG · GEMPA M5.8'), findsOneWidget);
+
+    // Verify Quick Actions
+    expect(find.text('SAYA AMAN'), findsOneWidget);
+    expect(find.text('BUTUH BANTUAN'), findsOneWidget);
+    expect(find.text('PETA RISIKO'), findsOneWidget);
+    expect(find.text('DARURAT 112'), findsOneWidget);
+
+    // Verify Survival Kit & Tsunami Shelter
+    expect(find.text('ZONA AMAN TSUNAMI'), findsOneWidget);
+    expect(find.text('TES Gedung Escape Ulak Karang'), findsOneWidget);
+    expect(find.text('Tas Siaga Bencana (72 Jam)'), findsOneWidget);
+
+    // Verify Micro-tools
+    expect(find.text('Siaga Offline: Siap'), findsOneWidget);
+    expect(find.text('Sirine / Peluit'), findsOneWidget);
+  });
 }
+

@@ -202,112 +202,133 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
 
-            // 3. Konten Utama di Tengah (Logo + SIGAP + Tagline)
+            // 3. Konten Utama di Tengah (Logo Resmi SIGAP + Judul + Tagline)
             SafeArea(
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Row Logo Emblem + Teks "SIGAP"
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Emblem Kotak Mint dengan Efek Radar Signal
-                        AnimatedBuilder(
-                          animation: Listenable.merge([
-                            _logoScaleAnimation,
-                            _logoFadeAnimation,
-                            _radarController,
-                          ]),
-                          builder: (context, child) {
-                            return Transform.scale(
-                              scale: _logoScaleAnimation.value,
-                              child: Opacity(
-                                opacity: _logoFadeAnimation.value,
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    // Radar Pulse Wave 1
-                                    CustomPaint(
-                                      painter: _RadarWavePainter(
-                                        progress: _radarController.value,
-                                        color: AppColors.mintAccent,
-                                      ),
-                                      size: const Size(64, 64),
-                                    ),
-                                    // Radar Pulse Wave 2 (Phase shifted)
-                                    CustomPaint(
-                                      painter: _RadarWavePainter(
-                                        progress: (_radarController.value + 0.5) % 1.0,
-                                        color: AppColors.mintAccent,
-                                      ),
-                                      size: const Size(64, 64),
-                                    ),
-                                    // Kotak Emblem Logo Utama (Sesuai SVG Mockup x:102.5 y:329.5 w:40 h:40)
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.mintAccent,
-                                        borderRadius: BorderRadius.circular(9.0),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: AppColors.mintAccent.withValues(alpha: 0.30),
-                                            blurRadius: 14,
-                                            spreadRadius: 1,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Center(
-                                        child: Icon(
-                                          Icons.sensors_rounded,
-                                          size: 26,
-                                          color: AppColors.primaryDark,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                    // Emblem Logo Resmi SIGAP dengan Animasi Pulse Radar
+                    AnimatedBuilder(
+                      animation: Listenable.merge([
+                        _logoScaleAnimation,
+                        _logoFadeAnimation,
+                        _radarController,
+                      ]),
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: _logoScaleAnimation.value,
+                          child: Opacity(
+                            opacity: _logoFadeAnimation.value,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // Radar Pulse Wave 1
+                                CustomPaint(
+                                  painter: _RadarWavePainter(
+                                    progress: _radarController.value,
+                                    color: AppColors.mintAccent,
+                                  ),
+                                  size: const Size(120, 120),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-
-                        const SizedBox(width: 14),
-
-                        // Teks "SIGAP"
-                        SlideTransition(
-                          position: _textSlideAnimation,
-                          child: FadeTransition(
-                            opacity: _textFadeAnimation,
-                            child: Text(
-                              'SIGAP',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 32,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 3.5,
-                                color: AppColors.textWhite,
-                              ),
+                                // Radar Pulse Wave 2 (Phase shifted)
+                                CustomPaint(
+                                  painter: _RadarWavePainter(
+                                    progress: (_radarController.value + 0.5) % 1.0,
+                                    color: AppColors.mintAccent,
+                                  ),
+                                  size: const Size(120, 120),
+                                ),
+                                // Lingkaran Logo Resmi SIGAP
+                                Container(
+                                  width: 86,
+                                  height: 86,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.mintAccent.withValues(alpha: 0.45),
+                                        blurRadius: 24,
+                                        spreadRadius: 3,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipOval(
+                                    child: Image.asset(
+                                      'assets/logo_sigap.png',
+                                      width: 86,
+                                      height: 86,
+                                      fit: BoxFit.cover,
+                                      filterQuality: FilterQuality.high,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Container(
+                                          color: AppColors.mintAccent,
+                                          child: const Icon(
+                                            Icons.shield_rounded,
+                                            size: 42,
+                                            color: AppColors.primaryDark,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
 
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 20),
 
-                    // Tagline: "Sistem informasi bencana"
+                    // Teks "SIGAP"
+                    SlideTransition(
+                      position: _textSlideAnimation,
+                      child: FadeTransition(
+                        opacity: _textFadeAnimation,
+                        child: Text(
+                          'SIGAP',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 4.0,
+                            color: AppColors.textWhite,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Tagline: "Siaga Bencana Kota Padang"
                     FadeTransition(
                       opacity: _taglineFadeAnimation,
                       child: Text(
-                        'Sistem informasi bencana',
+                        'Siaga Bencana Kota Padang',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13.5,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.6,
+                          color: AppColors.textMint,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    // Sub-tagline motto
+                    FadeTransition(
+                      opacity: _taglineFadeAnimation,
+                      child: Text(
+                        'Alam · Kota · Kesiapsiagaan',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
                           fontWeight: FontWeight.w400,
-                          letterSpacing: 0.5,
-                          color: AppColors.textMint.withValues(alpha: 0.92),
+                          letterSpacing: 1.2,
+                          color: AppColors.textMint.withValues(alpha: 0.75),
                         ),
                       ),
                     ),

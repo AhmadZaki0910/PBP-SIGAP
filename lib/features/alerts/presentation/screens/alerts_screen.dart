@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sigap_logo.dart';
 import 'package:sigap/features/family/presentation/screens/family_assistance_screen.dart';
 import 'package:sigap/features/map/presentation/screens/risk_map_screen.dart';
 import 'package:sigap/features/settings/presentation/screens/settings_screen.dart';
@@ -237,16 +238,14 @@ class _AlertsScreenState extends State<AlertsScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                 child: Row(
                   children: [
-                    Text(
-                      'SIGAP',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                        color: AppColors.textDark,
+                    const Flexible(
+                      child: SigapLogo(
+                        size: 28,
+                        showText: true,
+                        textColor: AppColors.textDark,
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     Text(
                       'PDG · 09:41',
                       style: GoogleFonts.plusJakartaSans(
@@ -635,13 +634,20 @@ class _AlertsScreenState extends State<AlertsScreen> {
       // Tab 1 (Peringatan) AKTIF (Mint #E8F3EC)
       // ==========================================
       bottomNavigationBar: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            top: BorderSide(color: AppColors.borderLight.withValues(alpha: 0.7), width: 1.0),
-          ),
+          color: Colors.white.withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryDark.withValues(alpha: 0.12),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         child: SafeArea(
           top: false,
           child: Row(
@@ -760,30 +766,40 @@ class _AlertsScreenState extends State<AlertsScreen> {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
-          height: 56,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 48,
           margin: const EdgeInsets.symmetric(horizontal: 2),
           decoration: BoxDecoration(
-            color: isActive ? AppColors.mintAccent : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            color: isActive ? AppColors.primaryDark : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: AppColors.primaryDark.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                size: 20,
-                color: isActive ? AppColors.primaryDark : AppColors.textSlate,
+                size: 19,
+                color: isActive ? Colors.white : AppColors.textSlate,
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 10.5,
+                  fontSize: 10,
                   fontWeight: isActive ? FontWeight.w800 : FontWeight.w500,
-                  color: isActive ? AppColors.primaryDark : AppColors.textSlate,
+                  color: isActive ? Colors.white : AppColors.textSlate,
                 ),
               ),
             ],

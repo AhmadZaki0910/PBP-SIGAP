@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sigap_logo.dart';
 import '../../../../core/widgets/social_icons.dart';
 import 'login_screen.dart';
 import '../../../dashboard/presentation/screens/dashboard_screen.dart';
@@ -90,13 +91,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  void _handleSocialRegister(String provider) {
+  void _handleSocialRegister(String provider) async {
+    setState(() => _isLoading = true);
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    const userName = 'Ahmad Zaki';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Menghubungkan autentikasi dengan $provider...'),
-        backgroundColor: AppColors.primaryMedium,
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Text('Akun berhasil dibuat via $provider! Selamat datang, $userName.'),
+          ],
+        ),
+        backgroundColor: AppColors.primaryDark,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => const DashboardScreen(userName: userName),
       ),
     );
   }
@@ -122,35 +140,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Logo Row: Emblem Mint + Teks SIGAP
-                      Row(
-                        children: [
-                          Container(
-                            width: 26,
-                            height: 26,
-                            decoration: BoxDecoration(
-                              color: AppColors.mintAccent,
-                              borderRadius: BorderRadius.circular(5.0),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.sensors_rounded,
-                                size: 16,
-                                color: AppColors.primaryDark,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'SIGAP',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 19,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5,
-                              color: AppColors.textWhite,
-                            ),
-                          ),
-                        ],
+                      // Logo Row: Logo Resmi SIGAP + Teks SIGAP
+                      const SigapLogo(
+                        size: 32,
+                        showText: true,
+                        textColor: AppColors.textWhite,
+                        hasGlow: true,
                       ),
 
                       const SizedBox(height: 32),
@@ -384,12 +379,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          'Already have an account? ',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
-                            color: AppColors.textSlate,
+                        Flexible(
+                          child: Text(
+                            'Already have an account? ',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                              color: AppColors.textSlate,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         GestureDetector(
@@ -594,12 +592,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
           children: [
             icon,
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textDark,
+            Flexible(
+              child: Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

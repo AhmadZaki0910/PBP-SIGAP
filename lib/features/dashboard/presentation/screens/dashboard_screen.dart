@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sigap/core/theme/app_colors.dart';
+import 'package:sigap/core/widgets/sigap_logo.dart';
 import 'package:sigap/features/alerts/presentation/screens/alerts_screen.dart';
 import 'package:sigap/features/family/presentation/screens/family_assistance_screen.dart';
 import 'package:sigap/features/map/presentation/screens/risk_map_screen.dart';
+import 'package:sigap/core/services/bmkg_service.dart';
 import 'package:sigap/features/settings/presentation/screens/settings_screen.dart';
 import 'package:sigap/features/profile/presentation/screens/profile_screen.dart';
 
@@ -33,7 +35,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
   int _activeTab = 0; // 0: Dashboard, 1: Peringatan, 2: Peta risiko, 3: Keluarga
 
   // Status Keamanan Pengguna
@@ -41,6 +43,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _userSafetyTime = 'baru saja';
   String _userLocationNote = 'rumah';
   bool _shareLocation = true;
+
+  // Animasi Pulsing untuk Live Alert Status
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
+  // State Checklist "Tas Siaga Bencana (72 Jam)"
+  final List<Map<String, dynamic>> _survivalKit = [
+    {'title': 'Dokumen Penting (KTP/KK)', 'checked': true},
+    {'title': 'Air Bersih & Makanan Darurat', 'checked': true},
+    {'title': 'Kotak P3K & Obat Khusus', 'checked': true},
+    {'title': 'Senter & Peluit Darurat', 'checked': false},
+    {'title': 'Powerbank & Baterai Cadangan', 'checked': false},
+  ];
 
   @override
   void initState() {
@@ -53,6 +68,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
     );
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 0.35, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _loadBmkgData();
+  }
+
+  // Real-Time BMKG State
+  BmkgGempa? _bmkgGempa;
+
+  Future<void> _loadBmkgData() async {
+    final data = await BmkgService.fetchLatestGempa();
+    if (mounted) {
+      setState(() {
+        _bmkgGempa = data;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
   }
 
   // ==========================================
@@ -620,7 +664,473 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _showSirineDialog() {
+    bool isSounding = true;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, child) {
+                  return Container(
+                    width: 76,
+                    height: 76,
+                    decoration: BoxDecoration(
+                      color: isSounding
+                          ? AppColors.alertAwas.withValues(alpha: _pulseAnimation.value * 0.25)
+                          : AppColors.mintAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: isSounding ? AppColors.alertAwas : AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isSounding ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              Text(
+                isSounding ? 'SIRINE DARURAT AKTIF' : 'Sirine Dijeda',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: isSounding ? AppColors.alertAwas : AppColors.textDark,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Frekuensi audio sinyal tinggi (110 dB) untuk memudahkan tim SAR dan relawan evakuasi mendeteksi posisi Anda saat terjebak atau terisolir.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: AppColors.textSlate,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        setSheetState(() {
+                          isSounding = !isSounding;
+                        });
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        side: BorderSide(
+                          color: isSounding ? AppColors.alertRust : AppColors.primary,
+                          width: 1.2,
+                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: Text(
+                        isSounding ? 'Jeda Bunyi' : 'Lanjutkan Sirine',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          color: isSounding ? AppColors.alertRust : AppColors.primaryDark,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryDark,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: Text(
+                        'Matikan & Tutup',
+                        style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13.5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
+  void _showShelterEvakuasiModal() {
+    final shelters = [
+      {
+        'name': 'TES Gedung Escape Ulak Karang',
+        'dist': '420 meter',
+        'time': '5 mnt',
+        'capacity': '3.000 jiwa',
+        'elevation': '16 mdpl',
+        'route': 'Lewat Jl. Bahari menuju utara',
+        'isNear': true,
+      },
+      {
+        'name': 'Masjid Raya Sumatera Barat',
+        'dist': '1.2 km',
+        'time': '15 mnt',
+        'capacity': '10.000 jiwa',
+        'elevation': 'Zona Hijau Aman',
+        'route': 'Jl. Khatib Sulaiman',
+        'isNear': false,
+      },
+      {
+        'name': 'Gedung SMPN 1 Padang (Vertical Evac)',
+        'dist': '650 meter',
+        'time': '8 mnt',
+        'capacity': '1.500 jiwa',
+        'elevation': 'Lantai 3 & 4',
+        'route': 'Jl. Jend. Sudirman',
+        'isNear': false,
+      },
+      {
+        'name': 'Hotel Ibis Padang (Shelter Vertikal)',
+        'dist': '950 meter',
+        'time': '11 mnt',
+        'capacity': '2.000 jiwa',
+        'elevation': 'Lantai 5 ke atas',
+        'route': 'Jl. Taman Siswa',
+        'isNear': false,
+      },
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.72,
+        minChildSize: 0.5,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (ctx, scrollController) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.borderLight,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.mintAccent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.directions_run_rounded, color: AppColors.primaryDark, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Titik Evakuasi Sementara (TES)',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        Text(
+                          'Peta Shelter Aman Tsunami Kota Padang',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: AppColors.textSlate),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.alertPeach,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.alertBorderPeach),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: AppColors.alertRust, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'PENTING: Jangan gunakan mobil atau motor saat evakuasi tsunami untuk mencegah kemacetan total!',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.alertRust,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              ...shelters.map((s) => Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: s['isNear'] == true ? AppColors.mintSurface : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: s['isNear'] == true ? AppColors.primaryLight : AppColors.borderLight,
+                    width: s['isNear'] == true ? 1.5 : 1.0,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            s['name'] as String,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ),
+                        if (s['isNear'] == true)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'TERDEKAT',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.directions_walk_rounded, size: 15, color: AppColors.textSlate),
+                        const SizedBox(width: 4),
+                        Text('${s['dist']} (${s['time']})', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textDark)),
+                        const SizedBox(width: 12),
+                        const Icon(Icons.people_outline_rounded, size: 15, color: AppColors.textSlate),
+                        const SizedBox(width: 4),
+                        Text('${s['capacity']}', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSlate)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Rute: ${s['route']} · Elevasi: ${s['elevation']}',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.textSlate),
+                    ),
+                  ],
+                ),
+              )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showModeOfflineDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.offline_pin_rounded, color: AppColors.safeGreen, size: 26),
+            const SizedBox(width: 10),
+            Text(
+              'Mode Offline Aktif',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 17, color: AppColors.textDark),
+            ),
+          ],
+        ),
+        content: Text(
+          'Seluruh peta zona evakuasi tsunami Padang, nomor darurat 112, serta data kontak keluarga telah tersimpan di memori lokal ponsel Anda. Aplikasi tetap berfungsi penuh meskipun sinyal internet padam akibat bencana.',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: AppColors.textSlate, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Dimengerti',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AppColors.primary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFamilyMemberDetail({
+    required String name,
+    required String status,
+    required Color statusColor,
+    required String location,
+    required String lastUpdate,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppColors.mintAccent,
+                  child: const Icon(Icons.person_rounded, size: 26, color: AppColors.primaryDark),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            status,
+                            style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700, color: statusColor),
+                          ),
+                          Text(' · $lastUpdate', style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: AppColors.textSlate)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.mintSurface,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Lokasi Terakhir: $location',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textDark, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Menghubungi telepon $name...'), behavior: SnackBarBehavior.floating),
+                      );
+                    },
+                    icon: const Icon(Icons.call_rounded, size: 18),
+                    label: const Text('Telepon'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primaryDark,
+                      side: const BorderSide(color: AppColors.borderLight),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _navigateToFamilyAssistance();
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                    label: const Text('Buka Profil'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryDark,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -632,51 +1142,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ==========================================
-              // 1. TOP HEADER (SIGAP · PDG 09:41 · ICONS)
+              // 1. TOP HEADER (LOGO RESMI SIGAP · SETTINGS & PROFILE)
               // ==========================================
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
                 child: Row(
                   children: [
-                    // Brand Text "SIGAP"
-                    Text(
-                      'SIGAP',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                        color: AppColors.textDark,
-                      ),
+                    // Brand Logo Resmi SIGAP
+                    const SigapLogo(
+                      size: 30,
+                      showText: true,
+                      textColor: AppColors.textDark,
+                      hasGlow: true,
                     ),
                     const Spacer(),
-                    // Local Time Badge: "PDG · 09:41"
-                    Text(
-                      'PDG · 09:41',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Gear / Settings Icon
-                    GestureDetector(
+                    // Settings Icon Button
+                    InkWell(
                       onTap: _navigateToSettings,
-                      child: const Icon(
-                        Icons.settings_outlined,
-                        size: 21,
-                        color: AppColors.textDark,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.borderLight),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.settings_outlined,
+                          size: 19,
+                          color: AppColors.textDark,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 14),
-                    // Profile Icon
-                    GestureDetector(
+                    const SizedBox(width: 8),
+                    // Profile Icon Button
+                    InkWell(
                       onTap: _navigateToProfile,
-                      child: const Icon(
-                        Icons.person_outline_rounded,
-                        size: 22,
-                        color: AppColors.textDark,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.borderLight),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.person_outline_rounded,
+                          size: 19,
+                          color: AppColors.textDark,
+                        ),
                       ),
                     ),
                   ],
@@ -684,346 +1214,475 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
 
               // ==========================================
-              // 2. DASHBOARD TITLE & SUBTITLE
-              // Sesuai Figma y=120..270
+              // 2. GREETING & RINGKASAN STATUS
               // ==========================================
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 16),
-                    Text(
-                      'Dashboard',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textDark,
-                        letterSpacing: -0.5,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Halo, ${widget.userName} 👋',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textDark,
+                              letterSpacing: -0.4,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Kesiapsiagaan: Waspada Gempa Susulan',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13,
+                              color: AppColors.textSlate,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Ringkasan kondisi terkini · Padang, Sumatera Barat',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.textSlate,
-                        height: 1.35,
-                      ),
+                    const SizedBox(width: 10),
+                    // Live Status Badge SIAGA dengan Animasi Pendar Halus
+                    AnimatedBuilder(
+                      animation: _pulseAnimation,
+                      builder: (context, child) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.alertPeach,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.alertTerracotta.withValues(alpha: _pulseAnimation.value),
+                              width: 1.2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.alertTerracotta.withValues(alpha: _pulseAnimation.value * 0.25),
+                                blurRadius: 8,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.alertAwas,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'SIAGA · 09:41',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.alertRust,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'diperbarui 09:40',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textSlate,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
                   ],
                 ),
               ),
 
+              // Skor Kesiapsiagaan Personal Warga Padang (Gamifikasi)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFF3F9F5),
+                        Color(0xFFE8F3EC),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.borderLight),
+                  ),
+                  child: Row(
+                    children: [
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: CircularProgressIndicator(
+                              value: (50 + (_survivalKit.where((k) => k['checked'] == true).length * 10)) / 100,
+                              backgroundColor: AppColors.borderLight,
+                              color: AppColors.primary,
+                              strokeWidth: 3.5,
+                            ),
+                          ),
+                          Text(
+                            '${50 + (_survivalKit.where((k) => k['checked'] == true).length * 10)}%',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primaryDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Level Kesiapsiagaan: Siaga Tangguh',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primaryDark,
+                              ),
+                            ),
+                            Text(
+                              '${_survivalKit.where((k) => k['checked'] == true).length} dari 5 perlengkapan tas siaga siap bawa',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: AppColors.textSlate,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.verified_user_rounded, size: 20, color: AppColors.primary),
+                    ],
+                  ),
+                ),
+              ),
+
               // ==========================================
-              // 3. KARTU PERINGATAN AKTIF · PALING MENDESAK
-              // Sesuai Figma y=294.5 w=349 h=310
+              // 3. KARTU PERINGATAN AKTIF (WARM GRADIENT & SHADOW)
               // ==========================================
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.alertPeach,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.alertBorderPeach, width: 1.0),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFFFF6F0),
+                        Color(0xFFFFECE0),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.alertBorderPeach, width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.alertTerracotta.withValues(alpha: 0.12),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'PERINGATAN AKTIF · PALING MENDESAK',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textSlate,
-                          letterSpacing: 0.8,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final quake = _bmkgGempa ?? BmkgGempa.fallbackPadang;
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.alertTerracotta,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '🚨 BMKG · GEMPA M5.8',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                          letterSpacing: 0.4,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      quake.jam,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textSlate,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: _showDetailPeringatanDialog,
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: AppColors.alertTerracotta, width: 1),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Detail',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.alertRust,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: AppColors.alertRust),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Gempa bumi M5.8',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '08:42 · 24 km barat daya Padang · kedalaman 10 km',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.textSlate,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'Jauhi bangunan retak dan pantau arahan resmi.',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                          height: 1.35,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      // Button "LIHAT PERINGATAN"
-                      SizedBox(
-                        width: double.infinity,
-                        height: 47,
-                        child: OutlinedButton(
-                          onPressed: _showDetailPeringatanDialog,
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            side: const BorderSide(color: AppColors.alertTerracotta, width: 1.2),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(9),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.alertBorderPeach),
+                            ),
+                            child: const Icon(Icons.crisis_alert_rounded, color: AppColors.alertRust, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Gempa bumi M${_bmkgGempa?.magnitude ?? '5.8'} (Dangkal)',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${_bmkgGempa?.wilayah ?? '24 km barat daya Padang'} · Kedalaman ${_bmkgGempa?.kedalaman ?? '10 km'}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12.5,
+                                    color: AppColors.textSlate,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Potensi Tsunami: ${_bmkgGempa?.potensi ?? 'Tidak berpotensi'}. Waspada bangunan retak.',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.alertRust,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          child: Text(
-                            'LIHAT PERINGATAN',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.alertRust,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ),
 
-              const SizedBox(height: 32),
-
               // ==========================================
-              // 4. TINDAKAN CEPAT (2x2 GRID CARDS)
-              // Sesuai Figma y=580..1020
+              // 4. TINDAKAN CEPAT (TACTILE 2x2 GRID + TOOLS BAR)
               // ==========================================
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'TINDAKAN CEPAT',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textSlate,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Baris 1: SAYA AMAN & BUTUH BANTUAN
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Card 1: SAYA AMAN (Active Dark Green)
                         Expanded(
-                          child: InkWell(
-                            onTap: _showSayaAmanDialog,
-                            borderRadius: BorderRadius.circular(10),
-                            child: Container(
-                              height: 145,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryDark,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppColors.borderLight, width: 1.0),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(
-                                    Icons.shield_rounded,
-                                    color: AppColors.mintAccent,
-                                    size: 22,
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    'SAYA AMAN',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Bagikan ke orang terdekat',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 12,
-                                      color: AppColors.textMint.withValues(alpha: 0.9),
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                          child: Text(
+                            'TINDAKAN CEPAT',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textSlate,
+                              letterSpacing: 0.8,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-
-                        const SizedBox(width: 14),
-
-                        // Card 2: BUTUH BANTUAN (White Card)
-                        Expanded(
-                          child: InkWell(
-                            onTap: _showButuhBantuanDialog,
-                            borderRadius: BorderRadius.circular(10),
-                            child: Container(
-                              height: 145,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppColors.borderLight, width: 1.0),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Icon(
-                                    Icons.waving_hand_rounded,
-                                    color: AppColors.textDark,
-                                    size: 20,
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    'BUTUH\nBANTUAN',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.textDark,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Pilih kondisi dan berbagi lokasi',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11.5,
-                                      color: AppColors.textSlate,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                        if (_isSafe)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.mintAccent,
+                              borderRadius: BorderRadius.circular(4),
                             ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle_rounded, size: 11, color: AppColors.primaryDark),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Status: AMAN ($_userSafetyTime)',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primaryDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildActionTile(
+                            title: 'SAYA AMAN',
+                            subtitle: 'Kabari keluarga',
+                            icon: Icons.shield_rounded,
+                            isPrimary: true,
+                            onTap: _showSayaAmanDialog,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildActionTile(
+                            title: 'BUTUH BANTUAN',
+                            subtitle: 'Kirim sinyal SOS',
+                            icon: Icons.waving_hand_rounded,
+                            isAlert: true,
+                            onTap: _showButuhBantuanDialog,
                           ),
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 14),
-
-                    // Baris 2: PETA RISIKO & HUBUNGI DARURAT
+                    const SizedBox(height: 10),
                     Row(
                       children: [
-                        // Card 3: PETA RISIKO
+                        Expanded(
+                          child: _buildActionTile(
+                            title: 'PETA RISIKO',
+                            subtitle: 'Jalur evakuasi',
+                            icon: Icons.map_rounded,
+                            onTap: _navigateToRiskMap,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildActionTile(
+                            title: 'DARURAT 112',
+                            subtitle: 'BPBD & SAR Padang',
+                            icon: Icons.phone_in_talk_rounded,
+                            onTap: _showHubungiDaruratSheet,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Quick Survival Tools Strip
+                    Row(
+                      children: [
+                        // Offline Mode Indicator
                         Expanded(
                           child: InkWell(
-                            onTap: _navigateToRiskMap,
-                            borderRadius: BorderRadius.circular(10),
+                            onTap: _showModeOfflineDialog,
+                            borderRadius: BorderRadius.circular(8),
                             child: Container(
-                              height: 150,
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppColors.borderLight, width: 1.0),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.borderLight),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
-                                    Icons.flag_rounded,
-                                    color: AppColors.textDark,
-                                    size: 21,
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    'PETA RISIKO',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.textDark,
+                                  const Icon(Icons.offline_pin_rounded, size: 14, color: AppColors.safeGreen),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Siaga Offline: Siap',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textDark,
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Lihat bahaya di sekitar',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 12,
-                                      color: AppColors.textSlate,
-                                      height: 1.3,
-                                    ),
-                                  ),
+                                  const Icon(Icons.info_outline_rounded, size: 12, color: AppColors.textSlate),
                                 ],
                               ),
                             ),
                           ),
                         ),
-
-                        const SizedBox(width: 14),
-
-                        // Card 4: HUBUNGI DARURAT
+                        const SizedBox(width: 10),
+                        // Siren Quick Trigger
                         Expanded(
                           child: InkWell(
-                            onTap: _showHubungiDaruratSheet,
-                            borderRadius: BorderRadius.circular(10),
+                            onTap: _showSirineDialog,
+                            borderRadius: BorderRadius.circular(8),
                             child: Container(
-                              height: 150,
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                               decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppColors.borderLight, width: 1.0),
+                                color: AppColors.alertPeach,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.alertBorderPeach),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
-                                    Icons.phone_rounded,
-                                    color: AppColors.textDark,
-                                    size: 20,
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    'HUBUNGI\nDARURAT',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.textDark,
-                                      height: 1.2,
+                                  const Icon(Icons.volume_up_rounded, size: 14, color: AppColors.alertRust),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Sirine / Peluit',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.alertRust,
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Layanan mengikuti wilayah',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11.5,
-                                      color: AppColors.textSlate,
-                                      height: 1.3,
-                                    ),
-                                  ),
+                                  const Icon(Icons.play_arrow_rounded, size: 14, color: AppColors.alertRust),
                                 ],
                               ),
                             ),
@@ -1035,20 +1694,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
 
-              const SizedBox(height: 32),
-
               // ==========================================
-              // 5. RISIKO LOKASI ANDA (POTENSI BANJIR - SEDANG)
-              // Sesuai Figma y=1035.5 w=349 h=184
+              // 5. SHELTER EVAKUASI TERDEKAT (TSUNAMI HERO WIDGET)
               // ==========================================
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(15),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderLight, width: 1.0),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white,
+                        AppColors.mintSurface,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.35)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1056,278 +1726,681 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'RISIKO LOKASI ANDA',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textSlate,
-                              letterSpacing: 0.8,
+                          Expanded(
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryDark,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'ZONA AMAN TSUNAMI',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  'Elevasi: 16 mdpl',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.safeGreen,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: _showShelterEvakuasiModal,
+                            borderRadius: BorderRadius.circular(20),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Semua Shelter',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                const Icon(Icons.arrow_forward_ios_rounded, size: 9, color: AppColors.primary),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.all(9),
                             decoration: BoxDecoration(
                               color: AppColors.mintAccent,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.directions_run_rounded, color: AppColors.primaryDark, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'TES Gedung Escape Ulak Karang',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '420 meter · ±5 menit jalan kaki · Kapasitas 3.000 jiwa',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
+                                    color: AppColors.textSlate,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: _showShelterEvakuasiModal,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryDark,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              elevation: 0,
                             ),
                             child: Text(
-                              'SEDANG',
+                              'Pandu',
+                              style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ==========================================
+              // 6. STATUS LINGKUNGAN (DUAL COLUMN: RISIKO & CUACA)
+              // ==========================================
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                child: Row(
+                  children: [
+                    // Risiko Lokasi
+                    Expanded(
+                      child: InkWell(
+                        onTap: _navigateToRiskMap,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderLight),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Icon(Icons.water_damage_rounded, size: 20, color: AppColors.primary),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.mintAccent,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'SEDANG',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primaryDark,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'Potensi Banjir Rob',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textDark,
+                                ),
+                              ),
+                              Text(
+                                'Padang Barat · Pesisir',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: AppColors.textSlate,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Cuaca Terkini BMKG
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.borderLight),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Icon(Icons.cloud_queue_rounded, size: 20, color: AppColors.primaryDark),
+                                Text(
+                                  '29°C',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Hujan Ringan',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
+                                fontSize: 14.5,
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.textDark,
+                              ),
+                            ),
+                            Text(
+                              'Angin 14 km/j · BMKG',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: AppColors.textSlate,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ==========================================
+              // 6.5. KONDISI PANTAI PADANG (TAPLAU MARITIM BMKG)
+              // ==========================================
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFF0F9FF),
+                        Color(0xFFE0F2FE),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFBAE6FD)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.oceanCyan.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: AppColors.oceanWaveGradient,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.waves_rounded, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Taplau (Pantai Padang)',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primaryDark,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0284C7),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'BMKG MARITIM',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Gelombang 0.8 - 1.2 m (Tenang) · Pasang 17:45 WIB · UV Sedang',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF0369A1),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ==========================================
+              // 7. INTERACTIVE CHECKLIST "TAS SIAGA BENCANA (72 JAM)"
+              // ==========================================
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.borderLight),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.backpack_outlined, size: 18, color: AppColors.primary),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Tas Siaga Bencana (72 Jam)',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textDark,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Builder(
+                            builder: (context) {
+                              final readyCount = _survivalKit.where((k) => k['checked'] == true).length;
+                              final pct = ((readyCount / _survivalKit.length) * 100).toInt();
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: readyCount == _survivalKit.length ? AppColors.safeGreen.withValues(alpha: 0.15) : AppColors.mintAccent,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '$pct% ($readyCount/${_survivalKit.length})',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: readyCount == _survivalKit.length ? AppColors.safeGreen : AppColors.primaryDark,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      // Progress bar
+                      Builder(
+                        builder: (context) {
+                          final readyCount = _survivalKit.where((k) => k['checked'] == true).length;
+                          final progress = readyCount / _survivalKit.length;
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              backgroundColor: AppColors.borderLight,
+                              valueColor: AlwaysStoppedAnimation(
+                                readyCount == _survivalKit.length ? AppColors.safeGreen : AppColors.primary,
+                              ),
+                              minHeight: 5,
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      // Interactive Checklist Items
+                      ..._survivalKit.map((item) {
+                        final bool checked = item['checked'] as bool;
+                        return InkWell(
+                          onTap: () {
+                            setState(() {
+                              item['checked'] = !checked;
+                            });
+                            final readyCount = _survivalKit.where((k) => k['checked'] == true).length;
+                            if (readyCount == _survivalKit.length) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Hebat! Tas Siaga Bencana 72 Jam Anda sudah 100% lengkap! 🎉'),
+                                  backgroundColor: AppColors.safeGreen,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  checked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                  size: 19,
+                                  color: checked ? AppColors.primary : AppColors.textSlate,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    item['title'] as String,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12.5,
+                                      fontWeight: checked ? FontWeight.w600 : FontWeight.w400,
+                                      color: checked ? AppColors.textDark : AppColors.textSlate,
+                                      decoration: checked ? TextDecoration.lineThrough : null,
+                                      decorationColor: AppColors.textSlate,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ==========================================
+              // 8. KELUARGA TERPANTAU (INTERACTIVE AVATAR CHIPS)
+              // ==========================================
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.borderLight),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Pantauan Keluarga',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textDark,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _navigateToFamilyAssistance,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Kelola',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: AppColors.primary),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildFamilyAvatarChip(
+                              name: 'Anda',
+                              status: _isSafe ? 'Aman' : 'SOS',
+                              statusColor: _isSafe ? AppColors.safeGreen : AppColors.alertAwas,
+                              icon: Icons.person_rounded,
+                              onTap: _showSayaAmanDialog,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildFamilyAvatarChip(
+                              name: 'Ibu',
+                              status: 'Aman',
+                              statusColor: AppColors.safeGreen,
+                              icon: Icons.face_rounded,
+                              onTap: () => _showFamilyMemberDetail(
+                                name: 'Ibu',
+                                status: 'Aman',
+                                statusColor: AppColors.safeGreen,
+                                location: 'Rumah (Kec. Padang Barat)',
+                                lastUpdate: '2 menit lalu',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildFamilyAvatarChip(
+                              name: 'Ayah',
+                              status: 'Terputus',
+                              statusColor: AppColors.alertWaspada,
+                              icon: Icons.face_6_rounded,
+                              onTap: () => _showFamilyMemberDetail(
+                                name: 'Ayah',
+                                status: 'Belum Terhubung',
+                                statusColor: AppColors.alertWaspada,
+                                location: 'Kantor / Jalan (Belum konfirmasi)',
+                                lastUpdate: '15 menit lalu',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildFamilyAvatarChip(
+                              name: 'Adik',
+                              status: 'Cek',
+                              statusColor: AppColors.alertSiaga,
+                              icon: Icons.face_3_rounded,
+                              onTap: () => _showFamilyMemberDetail(
+                                name: 'Adik',
+                                status: 'Perlu Konfirmasi',
+                                statusColor: AppColors.alertSiaga,
+                                location: 'Sekolah (Kec. Padang Utara)',
+                                lastUpdate: '40 menit lalu',
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'Potensi banjir',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Kec. Padang Barat · hujan sedang',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                          color: AppColors.textSlate,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      GestureDetector(
-                        onTap: _navigateToRiskMap,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'lihat peta risiko',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.textDark,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.arrow_forward_rounded, size: 16, color: AppColors.textDark),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
               ),
 
-              const SizedBox(height: 32),
-
               // ==========================================
-              // 6. KELUARGA & BANTUAN CARD
-              // Sesuai Figma y=1240.5 w=349 h=474
+              // 9. PEMBARUAN TERKINI (COMPACT TICKER)
               // ==========================================
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                 child: Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderLight, width: 1.0),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.borderLight),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Keluarga & Bantuan',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '1 aman · 1 belum terhubung · 1 perlu konfirmasi',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13.5,
-                          color: AppColors.textSlate,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Member 0: User sendiri
-                      _buildFamilyItem(
-                        name: 'Anda (${widget.userName})',
-                        detail: '$_userLocationNote · $_userSafetyTime',
-                        badgeText: _isSafe ? 'AMAN' : 'BUTUH BANTUAN',
-                        badgeBg: _isSafe ? AppColors.mintAccent : AppColors.alertPeach,
-                        badgeColor: _isSafe ? AppColors.textDark : AppColors.alertRust,
-                      ),
-
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Divider(height: 1, color: AppColors.borderLight),
-                      ),
-
-                      // Member 1: Ibu
-                      _buildFamilyItem(
-                        name: 'Ibu',
-                        detail: 'rumah · 2 menit lalu',
-                        badgeText: 'AMAN',
-                        badgeBg: AppColors.mintAccent,
-                        badgeColor: AppColors.textDark,
-                      ),
-
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Divider(height: 1, color: AppColors.borderLight),
-                      ),
-
-                      // Member 2: Ayah
-                      _buildFamilyItem(
-                        name: 'Ayah',
-                        detail: 'lokasi tidak diketahui',
-                        badgeText: 'BELUM TERHUBUNG',
-                        badgeBg: AppColors.alertPeach,
-                        badgeColor: AppColors.alertRust,
-                      ),
-
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Divider(height: 1, color: AppColors.borderLight),
-                      ),
-
-                      // Member 3: Adik
-                      _buildFamilyItem(
-                        name: 'Adik',
-                        detail: 'sekolah · 40 menit lalu',
-                        badgeText: 'PERLU KONFIRMASI',
-                        badgeBg: AppColors.alertPeach,
-                        badgeColor: AppColors.alertRust,
-                      ),
-
-                      const SizedBox(height: 22),
-
-                      GestureDetector(
-                        onTap: _navigateToFamilyAssistance,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'lihat semua',
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'PEMBARUAN TERKINI',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.textDark,
+                                color: AppColors.textSlate,
+                                letterSpacing: 0.8,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.arrow_forward_rounded, size: 16, color: AppColors.textDark),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '● Live Feed',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.safeGreen,
+                            ),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 10),
+                      _buildCompactLogItem(time: '09:38', text: 'Ibu menandai status Aman di rumah.'),
+                      const Divider(height: 14, color: AppColors.borderLight),
+                      _buildCompactLogItem(time: '08:42', text: 'Peringatan gempa M5.8 diterbitkan BMKG.'),
                     ],
                   ),
                 ),
               ),
 
-              const SizedBox(height: 32),
-
-              // ==========================================
-              // 7. PEMBARUAN TERAKHIR (TIMELINE LOG)
-              // Sesuai Figma y=1735.5 w=349 h=261
-              // ==========================================
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderLight, width: 1.0),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'PEMBARUAN TERAKHIR',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textSlate,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-
-                      // Log Item 1
-                      _buildLogItem(
-                        time: '09:38',
-                        text: 'Ibu menandai status Aman.',
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Log Item 2
-                      _buildLogItem(
-                        time: '09:24',
-                        text: 'Posko GOR Agus Salim masih tersedia.',
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Log Item 3
-                      _buildLogItem(
-                        time: '08:42',
-                        text: 'Peringatan gempa M5.8 diterbitkan.',
-                      ),
-
-                      const SizedBox(height: 18),
-
-                      GestureDetector(
-                        onTap: () {},
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'semua',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.textDark,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.arrow_forward_rounded, size: 16, color: AppColors.textDark),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
             ],
           ),
         ),
       ),
 
       // ==========================================
-      // 8. BOTTOM NAVIGATION BAR
-      // Sesuai Figma rects: 4 Tab Pills di y=2031
+      // 8. BOTTOM NAVIGATION BAR (FLOATING ISLAND)
       // ==========================================
       bottomNavigationBar: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            top: BorderSide(color: AppColors.borderLight.withValues(alpha: 0.7), width: 1.0),
-          ),
+          color: Colors.white.withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryDark.withValues(alpha: 0.12),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         child: SafeArea(
           top: false,
           child: Row(
@@ -1359,72 +2432,188 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildFamilyItem({
-    required String name,
-    required String detail,
-    required String badgeText,
-    required Color badgeBg,
-    required Color badgeColor,
+  Widget _buildActionTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isPrimary = false,
+    bool isAlert = false,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    Color bgColor = Colors.white;
+    Color textColor = AppColors.textDark;
+    Color subColor = AppColors.textSlate;
+    Color iconColor = AppColors.primary;
+    Border? border = Border.all(color: AppColors.borderLight);
+
+    if (isPrimary) {
+      bgColor = AppColors.primaryDark;
+      textColor = Colors.white;
+      subColor = AppColors.textMint;
+      iconColor = AppColors.mintAccent;
+      border = null;
+    } else if (isAlert) {
+      bgColor = Colors.white;
+      textColor = AppColors.alertRust;
+      iconColor = AppColors.alertRust;
+      border = Border.all(color: AppColors.alertBorderPeach, width: 1.2);
+    }
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 74,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: border,
+          boxShadow: isPrimary
+              ? [
+                  BoxShadow(
+                    color: AppColors.primaryDark.withValues(alpha: 0.18),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
           children: [
-            Text(
-              name,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textDark,
-              ),
-            ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: badgeBg,
-                borderRadius: BorderRadius.circular(6),
+                color: isPrimary
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : (isAlert ? AppColors.alertPeach : AppColors.mintSurface),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                badgeText,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
-                  color: badgeColor,
-                  letterSpacing: 0.3,
-                ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: textColor,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10.5,
+                      color: subColor,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          detail,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 14,
-            color: AppColors.textSlate,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildLogItem({
+  Widget _buildFamilyAvatarChip({
+    required String name,
+    required String status,
+    required Color statusColor,
+    required IconData icon,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        decoration: BoxDecoration(
+          color: AppColors.mintSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 17,
+                  backgroundColor: AppColors.mintAccent,
+                  child: Icon(icon, size: 18, color: AppColors.primaryDark),
+                ),
+                Positioned(
+                  bottom: -1,
+                  right: -1,
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+            Text(
+              status,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactLogItem({
     required String time,
     required String text,
   }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: 50,
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.mintAccent,
+            borderRadius: BorderRadius.circular(4),
+          ),
           child: Text(
             time,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 14.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textDark,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primaryDark,
             ),
           ),
         ),
@@ -1432,17 +2621,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Expanded(
           child: Text(
             text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 14,
+              fontSize: 12.5,
               fontWeight: FontWeight.w500,
               color: AppColors.textDark,
-              height: 1.35,
             ),
           ),
         ),
       ],
     );
   }
+
+
 
   Widget _buildNavPill({
     required int index,
@@ -1466,30 +2658,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
             });
           }
         },
-        child: Container(
-          height: 56,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 48,
           margin: const EdgeInsets.symmetric(horizontal: 2),
           decoration: BoxDecoration(
-            color: isActive ? AppColors.mintAccent : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            color: isActive ? AppColors.primaryDark : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: AppColors.primaryDark.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                size: 20,
-                color: isActive ? AppColors.primaryDark : AppColors.textSlate,
+                size: 19,
+                color: isActive ? Colors.white : AppColors.textSlate,
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: 10.5,
+                  fontSize: 10,
                   fontWeight: isActive ? FontWeight.w800 : FontWeight.w500,
-                  color: isActive ? AppColors.primaryDark : AppColors.textSlate,
+                  color: isActive ? Colors.white : AppColors.textSlate,
                 ),
               ),
             ],
